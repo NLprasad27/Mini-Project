@@ -1,0 +1,12 @@
+
+To create in one go, run: create-vite <DIRECTORY> --no-interactive --template <TEMPLATE>
+
+[?25l│
+◆  Install with npm and start now?
+│  ● Yes / ○ No
+└
+[999D[4A[1B[J■  Install with npm and start now?
+│  [9m[2mYes[22m[29m
+│
+[?25h└  Operation cancelled
+

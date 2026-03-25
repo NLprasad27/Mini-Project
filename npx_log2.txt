@@ -1,0 +1,9 @@
+│
+◇  Scaffolding project in C:\Users\HP\OneDrive\Desktop\Project\frontend...
+│
+└  Done. Now run:
+
+  cd frontend
+  npm install
+  npm run dev
+
