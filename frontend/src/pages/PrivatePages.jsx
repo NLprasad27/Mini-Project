@@ -13,6 +13,8 @@ export const Login = ({ setUser }) => {
     const [pass, setPass] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [otpSent, setOtpSent] = useState(false);
+    const [otp, setOtp] = useState('');
     const navigate = useNavigate();
 
     // On signup, always user; on login, three roles
@@ -28,9 +30,26 @@ export const Login = ({ setUser }) => {
                 const u = { ...res.data.user, role: 'user' };
                 setUser(u); localStorage.setItem('token', JSON.stringify(u));
                 navigate('/');
+            } else if (otpSent) {
+                // Verify OTP
+                const res = await axios.post(`${API_URL}/user/verify-otp`, { email, otp, role });
+                if (!res.data.success) { setError(res.data.message); setLoading(false); return; }
+                const u = res.data.user;
+                setUser(u); localStorage.setItem('token', JSON.stringify(u));
+                if (u.role === 'admin') navigate('/admin');
+                else if (u.role === 'doctor') navigate('/doctor-dashboard');
+                else navigate('/');
             } else {
+                // Initial Login
                 const res = await axios.post(`${API_URL}/user/login`, { email, password: pass, role });
                 if (!res.data.success) { setError(res.data.message); setLoading(false); return; }
+                
+                if (res.data.otpSent) {
+                    setOtpSent(true);
+                    setLoading(false);
+                    return;
+                }
+
                 const u = res.data.user;
                 setUser(u); localStorage.setItem('token', JSON.stringify(u));
                 if (u.role === 'admin') navigate('/admin');
@@ -72,15 +91,37 @@ export const Login = ({ setUser }) => {
                         <input className="form-input" type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Your full name" required />
                     </div>
                 )}
-                <div className="form-field"><label className="form-label">Email Address</label>
-                    <input className="form-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required />
-                </div>
-                <div className="form-field" style={{ marginBottom: 28 }}><label className="form-label">Password</label>
-                    <input className="form-input" type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" required />
-                </div>
+                {!otpSent ? (
+                    <>
+                        <div className="form-field"><label className="form-label">Email Address</label>
+                            <input className="form-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required />
+                        </div>
+                        <div className="form-field" style={{ marginBottom: 28 }}><label className="form-label">Password</label>
+                            <input className="form-input" type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" required />
+                        </div>
+                    </>
+                ) : (
+                    <div className="form-field" style={{ marginBottom: 28 }}>
+                        <label className="form-label">Enter 6-digit OTP</label>
+                        <input 
+                            className="form-input" 
+                            type="text" 
+                            value={otp} 
+                            onChange={e => setOtp(e.target.value)} 
+                            placeholder="123456" 
+                            maxLength={6} 
+                            required 
+                            autoFocus
+                        />
+                        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>
+                            An OTP has been sent to <strong>{email}</strong>. 
+                            <span style={{ color: 'var(--primary)', cursor: 'pointer', marginLeft: 4 }} onClick={() => setOtpSent(false)}>Edit email?</span>
+                        </p>
+                    </div>
+                )}
 
                 <button className="btn btn-primary w-full" style={{ padding: '14px', fontSize: 15, borderRadius: 12 }} disabled={loading}>
-                    {loading ? 'Please wait…' : mode === 'Sign Up' ? 'Create Account' : `Sign in as ${role.charAt(0).toUpperCase() + role.slice(1)}`}
+                    {loading ? 'Please wait…' : otpSent ? 'Verify OTP' : mode === 'Sign Up' ? 'Create Account' : `Sign in as ${role.charAt(0).toUpperCase() + role.slice(1)}`}
                 </button>
 
                 <p style={{ textAlign: 'center', marginTop: 20, fontSize: 14, color: 'var(--text-muted)' }}>
@@ -161,7 +202,7 @@ export const ApplyDoctor = ({ user }) => {
                         </div>
 
                         <div className="grid-2">
-                            {[['Full Name', 'name', 'text'], ['Email Address', 'email', 'email'], ['Phone Number', 'phone', 'tel'], ['Degree / Qualification', 'degree', 'text'], ['Address / Clinic Location', 'address', 'text'], ['Consultation Fee ($)', 'fees', 'number']].map(([label, key, type]) => (
+                            {[['Full Name', 'name', 'text'], ['Email Address', 'email', 'email'], ['Phone Number', 'phone', 'tel'], ['Degree / Qualification', 'degree', 'text'], ['Address / Clinic Location', 'address', 'text'], ['Consultation Fee (₹)', 'fees', 'number']].map(([label, key, type]) => (
                                 <div key={key} className="form-field">
                                     <label className="form-label">{label}</label>
                                     <input className="form-input" type={type} value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })} required />
@@ -221,19 +262,20 @@ export const MyProfile = ({ user, setUser }) => {
             <h1 style={{ fontSize: 28, fontWeight: 800, color: 'var(--secondary)', marginBottom: 8 }}>My Profile</h1>
             <p style={{ color: 'var(--text-muted)', marginBottom: 32 }}>Manage your personal information.</p>
             {saved && <div className="alert-success"><CheckCircle2 size={18} /> Profile updated!</div>}
-            <div className="profile-page-card">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 36 }}>
+            <div className="profile-page-card" style={{ position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 120, background: 'linear-gradient(135deg, var(--primary), #6366f1)', opacity: 0.08, zIndex: 0 }} />
+                <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 24, marginBottom: 36, paddingBottom: 20 }}>
                     <div className="profile-avatar-wrap" onClick={() => edit && fileRef.current.click()}>
                         {(imgFile ? URL.createObjectURL(imgFile) : user.image)
-                            ? <img src={imgFile ? URL.createObjectURL(imgFile) : user.image} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                            : <div className="avatar-placeholder">{user.name.charAt(0)}</div>}
+                            ? <img src={imgFile ? URL.createObjectURL(imgFile) : user.image} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '4px solid white', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                            : <div className="avatar-placeholder" style={{ border: '4px solid white', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>{user.name.charAt(0)}</div>}
                         {edit && <div className="avatar-overlay"><Upload size={22} /></div>}
                     </div>
                     <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => setImgFile(e.target.files[0])} />
-                    <div>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--secondary)' }}>{form.name}</div>
-                        <div style={{ fontSize: 14, color: 'var(--text-muted)' }}>{user.email}</div>
-                        {edit && <div style={{ fontSize: 12, color: 'var(--primary)', marginTop: 6, cursor: 'pointer' }} onClick={() => fileRef.current.click()}>Change photo</div>}
+                    <div style={{ paddingTop: 20 }}>
+                        <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--secondary)', letterSpacing: '-0.5px' }}>{form.name}</div>
+                        <div style={{ fontSize: 14, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}><Mail size={14} /> {user.email}</div>
+                        {edit && <div style={{ fontSize: 13, color: 'var(--primary)', marginTop: 8, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }} onClick={() => fileRef.current.click()}><Upload size={14}/> Edit Profile Photo</div>}
                     </div>
                 </div>
                 <div className="profile-field-row">
@@ -282,17 +324,62 @@ export const MyAppointments = ({ user }) => {
         if (res.data.success) setAppointments(prev => prev.map(a => a._id === id ? { ...a, cancelled: true } : a));
     };
 
+    const initPay = (order, appointmentId) => {
+        const options = {
+            key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_SVTtdzc3neNCRk', // Use env variable or fallback
+            amount: order.amount,
+            currency: order.currency,
+            name: "Prescripto Booking",
+            description: "Appointment Payment",
+            order_id: order.id,
+            receipt: order.receipt,
+            handler: async (response) => {
+                try {
+                    const { data } = await axios.post(`${API_URL}/user/verify-razorpay`, {
+                        razorpay_order_id: response.razorpay_order_id,
+                        razorpay_payment_id: response.razorpay_payment_id,
+                        razorpay_signature: response.razorpay_signature,
+                        appointmentId: appointmentId
+                    });
+                    if (data.success) {
+                        setAppointments(prev => prev.map(a => a._id === appointmentId ? { ...a, payment: true } : a));
+                    } else {
+                        alert(data.message || "Payment verification failed.");
+                    }
+                } catch (error) {
+                    alert("Verification error.");
+                }
+            }
+        };
+        const rzp = new window.Razorpay(options);
+        rzp.open();
+    };
+
+    const handlePayment = async (appointmentId) => {
+        try {
+            const { data } = await axios.post(`${API_URL}/user/payment-razorpay`, { appointmentId });
+            if (data.success) {
+                initPay(data.order, appointmentId);
+            } else {
+                alert(data.message || "Failed to initiate payment");
+            }
+        } catch (error) {
+            alert("Error initiating payment");
+        }
+    };
+
     return (
         <div className="page-wrapper"><div className="container animate-slide-up">
             <h1 style={{ fontSize: 28, fontWeight: 800, color: 'var(--secondary)', marginBottom: 8 }}>My Appointments</h1>
             <p style={{ color: 'var(--text-muted)', marginBottom: 32 }}>Track and manage your medical appointments.</p>
 
-            {loading ? <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '60px 0' }}>Loading…</p>
+            {loading ? <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '60px 0' }}>Loading your appointments…</p>
                 : appointments.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '80px 0', color: 'var(--text-muted)' }}>
-                        <Calendar size={48} style={{ margin: '0 auto 16px', opacity: .3 }} />
-                        <p style={{ marginBottom: 20 }}>No appointments yet.</p>
-                        <button className="btn btn-primary" onClick={() => navigate('/doctors')}>Book an appointment</button>
+                    <div style={{ textAlign: 'center', padding: '100px 0', background: 'white', borderRadius: 32, border: '1.5px dashed var(--border)' }}>
+                        <img src="/images/patient_empty.png" style={{ width: 320, height: 200, objectFit: 'contain', margin: '0 auto 28px', display: 'block' }} />
+                        <h2 style={{ fontSize: 24, fontWeight: 900, color: 'var(--secondary)', marginBottom: 12 }}>You’re All Clear!</h2>
+                        <p style={{ color: 'var(--text-muted)', marginBottom: 32, maxWidth: 400, margin: '0 auto 32px' }}>You don’t have any upcoming appointments. Looking for a checkup? Our experts are ready for you.</p>
+                        <button className="btn btn-primary" style={{ padding: '14px 44px' }} onClick={() => navigate('/doctors')}>Find a Doctor</button>
                     </div>
                 ) : (
                     <div className="appt-list">
@@ -311,7 +398,7 @@ export const MyAppointments = ({ user }) => {
                                     </span>
                                     {!appt.cancelled && !appt.isCompleted && (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                            {!appt.payment && <button className="btn btn-primary" style={{ padding: '8px 20px', fontSize: 13 }}>Pay Online</button>}
+                                            {!appt.payment && <button className="btn btn-primary" style={{ padding: '8px 20px', fontSize: 13 }} onClick={() => handlePayment(appt._id)}>Pay Online</button>}
                                             <button className="btn btn-outline" style={{ padding: '8px 20px', fontSize: 13, color: 'var(--danger)', borderColor: '#fca5a5' }} onClick={() => cancel(appt._id)}>Cancel</button>
                                         </div>
                                     )}
@@ -428,7 +515,7 @@ export const AdminDashboard = () => {
                                         </td>
                                         <td style={{ padding: '14px 20px', fontSize: 14, color: 'var(--text-muted)' }}>{doc.speciality}</td>
                                         <td style={{ padding: '14px 20px', fontSize: 14 }}>{doc.experience}</td>
-                                        <td style={{ padding: '14px 20px', fontSize: 14, fontWeight: 600, color: 'var(--primary)' }}>${doc.fees}</td>
+                                        <td style={{ padding: '14px 20px', fontSize: 14, fontWeight: 600, color: 'var(--primary)' }}>₹{doc.fees}</td>
                                         <td style={{ padding: '14px 20px' }}><span className="badge-available" style={{ margin: 0 }}>{doc.available ? 'Active' : 'Inactive'}</span></td>
                                     </tr>
                                 ))}</tbody>
@@ -445,8 +532,9 @@ export const AdminDashboard = () => {
                     </div>
                     {appsLoading ? <p style={{ color: 'var(--text-muted)' }}>Loading…</p>
                         : applications.length === 0 ? (
-                            <div style={{ textAlign: 'center', padding: '80px 0', color: 'var(--text-muted)' }}>
-                                <FileText size={48} style={{ margin: '0 auto 16px', opacity: .3 }} /><p>No applications yet.</p>
+                            <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
+                                <img src="/images/empty_office.png" style={{ width: 240, height: 160, objectFit: 'cover', borderRadius: 20, margin: '0 auto 20px', display: 'block' }} />
+                                <p>No applications yet. New doctors will appear here.</p>
                             </div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -462,7 +550,7 @@ export const AdminDashboard = () => {
                                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 24px', fontSize: 14, color: 'var(--text-muted)', marginBottom: 12 }}>
                                                     <span>📧 {app.email}</span><span>📞 {app.phone}</span>
                                                     <span>🩺 {app.speciality}</span><span>🎓 {app.degree} · {app.experience}</span>
-                                                    <span>💰 ${app.fees} fee</span><span>📍 {app.address}</span>
+                                                    <span>💰 ₹{app.fees} fee</span><span>📍 {app.address}</span>
                                                 </div>
                                                 <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 12 }}>{app.about}</p>
                                                 {app.adminNote && <p style={{ fontSize: 13, color: 'var(--danger)' }}>Note: {app.adminNote}</p>}
@@ -497,7 +585,7 @@ export const AdminDashboard = () => {
                             <div><div style={{ fontWeight: 700, color: 'var(--secondary)' }}>Doctor Photo</div><div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Uploaded to Cloudinary</div></div>
                         </div>
                         <div className="grid-2">
-                            {[['Doctor Full Name', 'name', 'text'], ['Email Address', 'email', 'email'], ['Temporary Password', 'password', 'password'], ['Degree', 'degree', 'text'], ['Address Line 1', 'addressLine1', 'text'], ['Address Line 2', 'addressLine2', 'text'], ['Consultation Fee ($)', 'fees', 'number']].map(([label, key, type]) => (
+                            {[['Doctor Full Name', 'name', 'text'], ['Email Address', 'email', 'email'], ['Temporary Password', 'password', 'password'], ['Degree', 'degree', 'text'], ['Address Line 1', 'addressLine1', 'text'], ['Address Line 2', 'addressLine2', 'text'], ['Consultation Fee (₹)', 'fees', 'number']].map(([label, key, type]) => (
                                 <div key={key} className="form-field"><label className="form-label">{label}</label>
                                     <input className="form-input" type={type} value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })} required={key !== 'addressLine2'} />
                                 </div>
@@ -529,9 +617,31 @@ export const AdminDashboard = () => {
 // ── Doctor Dashboard ──────────────────────────────────────────────────────────
 export const DoctorDashboard = ({ user }) => {
     const [appointments, setAppointments] = useState([]);
-    const [available, setAvailable] = useState(true);
-    const [loading, setLoading] = useState(true);
-    const [tab, setTab] = useState('upcoming');
+    const [available, setAvailable]       = useState(user?.available ?? true);
+    const [loading, setLoading]           = useState(true);
+    const [tab, setTab]                   = useState('upcoming');
+    // Profile
+    const [profile, setProfile] = useState(null);
+    const [profForm, setProfForm] = useState({ fees:'', about:'', addressLine1:'', addressLine2:'' });
+    const [profSaving, setProfSaving] = useState(false);
+    const [profSaved, setProfSaved]   = useState('');
+    const [profError, setProfError]   = useState('');
+    // Password
+    const [pwForm, setPwForm]     = useState({ currentPassword:'', newPassword:'', confirmPassword:'' });
+    const [pwSaving, setPwSaving] = useState(false);
+    const [pwMsg, setPwMsg]       = useState({ type:'', text:'' });
+
+    useEffect(() => {
+        if (!user?._id) return;
+        axios.get(`${API_URL}/doctor/self/${user._id}`)
+            .then(r => {
+                if (r.data.success) {
+                    setProfile(r.data.doctor);
+                    setAvailable(r.data.doctor.available);
+                    setProfForm({ fees: r.data.doctor.fees, about: r.data.doctor.about, addressLine1: r.data.doctor.address?.line1 || '', addressLine2: r.data.doctor.address?.line2 || '' });
+                }
+            }).catch(() => {});
+    }, [user]);
 
     useEffect(() => {
         if (!user?._id) return;
@@ -572,21 +682,103 @@ export const DoctorDashboard = ({ user }) => {
         <div className="admin-layout animate-slide-up">
             <aside className="admin-sidebar">
                 <div className="admin-sidebar-logo">🩺 Doctor Panel</div>
-                {[['upcoming', 'Upcoming', <Calendar size={18} />], ['completed', 'Completed', <CheckCircle2 size={18} />], ['cancelled', 'Cancelled', <X size={18} />]].map(([key, label, icon]) => (
-                    <div key={key} className={`admin-nav-item ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)}>{icon} {label}</div>
+                {[['upcoming','Upcoming',<Calendar size={18}/>],['completed','Completed',<CheckCircle2 size={18}/>],['cancelled','Cancelled',<X size={18}/>]].map(([key,label,icon])=>(
+                    <div key={key} className={`admin-nav-item ${tab===key?'active':''}`} onClick={()=>setTab(key)}>{icon} {label}</div>
                 ))}
-                <div style={{ marginTop: 'auto', padding: '0 8px' }}>
-                    <div style={{ background: 'var(--bg)', borderRadius: 'var(--r-lg)', padding: 16 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, color: 'var(--secondary)' }}>My Availability</div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ fontSize: 13, color: available ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>{available ? 'Available' : 'Unavailable'}</span>
-                            <button onClick={toggleAvail} style={{ color: available ? 'var(--success)' : 'var(--text-muted)' }}>{available ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}</button>
+                <div className="dropdown-divider" style={{margin:'8px 0'}} />
+                <div className={`admin-nav-item ${tab==='profile'?'active':''}`} onClick={()=>setTab('profile')}><Activity size={18}/> My Profile</div>
+                <div className={`admin-nav-item ${tab==='security'?'active':''}`} onClick={()=>setTab('security')}><ShieldPlus size={18}/> Change Password</div>
+                <div style={{marginTop:'auto',padding:'0 8px'}}>
+                    <div style={{background:'var(--bg)',borderRadius:'var(--r-lg)',padding:16}}>
+                        <div style={{fontWeight:600,fontSize:14,marginBottom:12,color:'var(--secondary)'}}>My Availability</div>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                            <span style={{fontSize:13,color:available?'var(--success)':'var(--text-muted)',fontWeight:600}}>{available?'Available':'Unavailable'}</span>
+                            <button onClick={toggleAvail} style={{color:available?'var(--success)':'var(--text-muted)'}}>{available?<ToggleRight size={32}/>:<ToggleLeft size={32}/>}</button>
                         </div>
                     </div>
                 </div>
             </aside>
 
             <div className="admin-content">
+                {/* ── Profile Tab ── */}
+                {tab === 'profile' && (
+                    <div className="animate-slide-up">
+                        <div className="admin-content-header"><h1 className="admin-content-title">My Profile</h1><p className="admin-content-sub">Update your professional information visible to patients.</p></div>
+                        {profSaved && <div className="alert-success" style={{marginBottom:24}}><CheckCircle2 size={18}/> {profSaved}</div>}
+                        {profError && <div style={{background:'#fef2f2',border:'1.5px solid #fca5a5',color:'#dc2626',borderRadius:'var(--r-md)',padding:'12px 16px',marginBottom:20,fontSize:14}}>{profError}</div>}
+                        {profile && (
+                            <div className="admin-form-card">
+                                <div style={{display:'flex',alignItems:'center',gap:20,marginBottom:32}}>
+                                    <img src={profile.image} style={{width:80,height:80,borderRadius:'50%',objectFit:'cover',border:'3px solid var(--primary-light)'}} onError={e=>e.target.src='https://avatar.iran.liara.run/public/job/doctor/male'}/>
+                                    <div>
+                                        <div style={{fontSize:20,fontWeight:800,color:'var(--secondary)'}}>{profile.name}</div>
+                                        <div style={{fontSize:14,color:'var(--text-muted)'}}>{profile.speciality} · {profile.degree}</div>
+                                        <div style={{fontSize:13,color:'var(--text-faint)',marginTop:4}}>{profile.email}</div>
+                                    </div>
+                                </div>
+                                <div className="grid-2">
+                                    <div className="form-field"><label className="form-label">Consultation Fee (₹)</label>
+                                        <input className="form-input" type="number" value={profForm.fees} onChange={e=>setProfForm({...profForm,fees:e.target.value})} />
+                                    </div>
+                                    <div className="form-field"><label className="form-label">Address Line 1</label>
+                                        <input className="form-input" value={profForm.addressLine1} onChange={e=>setProfForm({...profForm,addressLine1:e.target.value})} />
+                                    </div>
+                                    <div className="form-field"><label className="form-label">Address Line 2</label>
+                                        <input className="form-input" value={profForm.addressLine2} onChange={e=>setProfForm({...profForm,addressLine2:e.target.value})} />
+                                    </div>
+                                </div>
+                                <div className="form-field" style={{marginTop:4}}><label className="form-label">About / Professional Summary</label>
+                                    <textarea className="form-input" rows={4} style={{resize:'vertical'}} value={profForm.about} onChange={e=>setProfForm({...profForm,about:e.target.value})} />
+                                </div>
+                                <button className="btn btn-primary" style={{marginTop:24,padding:'12px 32px'}} disabled={profSaving}
+                                    onClick={async()=>{
+                                        setProfSaving(true); setProfSaved(''); setProfError('');
+                                        try {
+                                            const res = await axios.post(`${API_URL}/doctor/update-profile`,{doctorId:user._id,...profForm});
+                                            if(res.data.success) setProfSaved('Profile updated successfully!');
+                                            else setProfError(res.data.message);
+                                        } catch { setProfError('Server error.'); }
+                                        setProfSaving(false);
+                                    }}>
+                                    {profSaving?'Saving…':'Save Changes'}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* ── Security Tab ── */}
+                {tab === 'security' && (
+                    <div className="animate-slide-up">
+                        <div className="admin-content-header"><h1 className="admin-content-title">Change Password</h1><p className="admin-content-sub">Keep your account secure by using a strong password.</p></div>
+                        {pwMsg.text && <div className={pwMsg.type==='success'?'alert-success':''}  style={pwMsg.type==='error'?{background:'#fef2f2',border:'1.5px solid #fca5a5',color:'#dc2626',borderRadius:'var(--r-md)',padding:'12px 16px',marginBottom:20,fontSize:14,display:'flex',gap:8}:{marginBottom:20}}>
+                            {pwMsg.type==='success'&&<CheckCircle2 size={18}/>} {pwMsg.text}</div>}
+                        <div className="admin-form-card" style={{maxWidth:480}}>
+                            {[['Current Password','currentPassword'],['New Password','newPassword'],['Confirm New Password','confirmPassword']].map(([label,key])=>(
+                                <div key={key} className="form-field"><label className="form-label">{label}</label>
+                                    <input className="form-input" type="password" value={pwForm[key]} onChange={e=>setPwForm({...pwForm,[key]:e.target.value})} placeholder="••••••••" />
+                                </div>
+                            ))}
+                            <button className="btn btn-primary" style={{marginTop:8,padding:'12px 32px'}} disabled={pwSaving}
+                                onClick={async()=>{
+                                    if(pwForm.newPassword!==pwForm.confirmPassword){setPwMsg({type:'error',text:'Passwords do not match.'});return;}
+                                    if(pwForm.newPassword.length<6){setPwMsg({type:'error',text:'Password must be at least 6 characters.'});return;}
+                                    setPwSaving(true); setPwMsg({type:'',text:''});
+                                    try{
+                                        const res = await axios.post(`${API_URL}/doctor/change-password`,{doctorId:user._id,currentPassword:pwForm.currentPassword,newPassword:pwForm.newPassword});
+                                        if(res.data.success){setPwMsg({type:'success',text:res.data.message});setPwForm({currentPassword:'',newPassword:'',confirmPassword:''});}
+                                        else setPwMsg({type:'error',text:res.data.message});
+                                    }catch{setPwMsg({type:'error',text:'Server error.'});}
+                                    setPwSaving(false);
+                                }}>
+                                {pwSaving?'Updating…':'Update Password'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Appointments Tabs ── */}
+                {['upcoming','completed','cancelled'].includes(tab) && (<>
                 <div className="admin-content-header">
                     <h1 className="admin-content-title">Doctor Workspace</h1>
                     <p className="admin-content-sub">Welcome, {user?.name}! Manage your schedule below.</p>
@@ -599,8 +791,12 @@ export const DoctorDashboard = ({ user }) => {
                 <div style={{ background: 'white', border: '1.5px solid var(--border)', borderRadius: 'var(--r-lg)', overflow: 'hidden', boxShadow: 'var(--shadow-xs)' }}>
                     <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-light)', fontWeight: 700, fontSize: 16, color: 'var(--secondary)', textTransform: 'capitalize' }}>{tab} Appointments</div>
                     {loading ? <p style={{ padding: 24, color: 'var(--text-muted)' }}>Loading…</p>
-                        : filtered.length === 0 ? <p style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>No {tab} appointments.</p>
-                            : (
+                        : filtered.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
+                                <img src="/images/empty_office.png" style={{ width: 200, height: 140, objectFit: 'cover', borderRadius: 16, margin: '0 auto 20px', display: 'block' }} />
+                                <p>No {tab} appointments found for your selected schedule.</p>
+                            </div>
+                        ) : (
                                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                     <thead style={{ background: 'var(--bg)' }}><tr>{['Patient', 'Date', 'Time', 'Amount', 'Actions'].map(h => <th key={h} style={{ padding: '12px 20px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.06em' }}>{h}</th>)}</tr></thead>
                                     <tbody>{filtered.map((a, i) => (
@@ -608,7 +804,7 @@ export const DoctorDashboard = ({ user }) => {
                                             <td style={{ padding: '14px 20px' }}><div style={{ fontWeight: 600 }}>{a.userData?.name || 'Patient'}</div><div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{a.userData?.email}</div></td>
                                             <td style={{ padding: '14px 20px', fontSize: 14 }}>{a.slotDate}</td>
                                             <td style={{ padding: '14px 20px', fontSize: 14 }}>{a.slotTime}</td>
-                                            <td style={{ padding: '14px 20px', fontSize: 14, fontWeight: 600, color: 'var(--primary)' }}>${a.amount}</td>
+                                            <td style={{ padding: '14px 20px', fontSize: 14, fontWeight: 600, color: 'var(--primary)' }}>₹{a.amount}</td>
                                             <td style={{ padding: '14px 20px' }}>
                                                 {!a.isCompleted && !a.cancelled ? (
                                                     <div style={{ display: 'flex', gap: 8 }}>
@@ -624,23 +820,78 @@ export const DoctorDashboard = ({ user }) => {
                                 </table>
                             )}
                 </div>
+                </>)}
             </div>
         </div>
     );
 };
 
-export const InfoPage = ({ title }) => (
-    <div className="page-wrapper">
-        <div className="info-page animate-slide-up">
-            <ShieldPlus size={52} color="var(--primary)" style={{ margin: '0 auto 20px' }} />
-            <h1>{title}</h1>
-            <p>Prescripto connects patients with leading medical professionals. Our priority is your health — providing the ability to filter, assess, and book appointments seamlessly.</p>
-            {title === 'Contact Us' && (
-                <div className="contact-chips">
-                    <div className="contact-chip"><MapPin size={16} /> 123 Healthcare Ave, New York</div>
-                    <div className="contact-chip"><Mail size={16} /> support@prescripto.com</div>
+export const InfoPage = ({ title }) => {
+    const isAbout = title === 'About Us';
+    
+    return (
+        <div className="page-wrapper" style={{ background: 'var(--bg)' }}>
+            <div className="container animate-slide-up" style={{ padding: '80px 0' }}>
+                
+                {/* ── Main Hero Card ── */}
+                <div className="profile-card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: isAbout ? 'row' : 'row-reverse', height: 'auto', minHeight: 500, border: 'none', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.08)' }}>
+                    <div style={{ flex: 1.2, padding: 60, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>{isAbout ? 'Our Legacy' : 'Get in Touch'}</span>
+                        <h1 style={{ fontSize: 48, fontWeight: 900, color: 'var(--secondary)', marginBottom: 24, lineHeight: 1.1 }}>{title}</h1>
+                        <p style={{ fontSize: 18, lineHeight: 1.8, color: 'var(--text-muted)', marginBottom: 32 }}>
+                            {isAbout 
+                                ? "At MediLink, we treat healthcare infrastructure as a mission-critical system. Leveraging two decades of software engineering expertise, we've built a platform that prioritizes reliability, data integrity, and seamless clinical workflows above all else."
+                                : "Our technical operations and support teams are available 24/7 to ensure zero downtime for your clinical schedule. Reach out to our engineers or support specialists via any channel below."
+                            }
+                        </p>
+                        
+                        {title === 'Contact Us' ? (
+                            <div style={{ display: 'grid', gap: 24 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                                    <div style={{ width: 56, height: 56, background: 'var(--primary-light)', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}><MapPin size={26} /></div>
+                                    <div><div style={{ fontWeight: 800, color: 'var(--secondary)' }}>HQ Location</div><div style={{ fontSize: 15, color: 'var(--text-muted)' }}>123 Tech-Hub Plaza, Silicon Valley, CA 94043</div></div>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                                    <div style={{ width: 56, height: 56, background: 'var(--primary-light)', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}><Mail size={26} /></div>
+                                    <div><div style={{ fontWeight: 800, color: 'var(--secondary)' }}>Engineering Support</div><div style={{ fontSize: 15, color: 'var(--text-muted)' }}>ops@medilink.io</div></div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', gap: 16 }}>
+                                <button className="btn btn-primary" style={{ padding: '14px 32px' }}>Request Demo</button>
+                                <button className="btn btn-outline" style={{ padding: '14px 32px' }}>Our Stack</button>
+                            </div>
+                        )}
+                    </div>
+                    <div style={{ flex: 1, position: 'relative', background: 'var(--primary-light)' }}>
+                        <img src={isAbout ? "/images/mission.png" : "/images/support_hd.png"} style={{ position: 'absolute', width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to right, rgba(255,255,255,0.05), transparent)' }} />
+                    </div>
                 </div>
-            )}
+
+                {/* ── Secondary Section (About Only) ── */}
+                {isAbout && (
+                    <div style={{ marginTop: 100 }}>
+                        <div style={{ textAlign: 'center', marginBottom: 60 }}>
+                            <h2 style={{ fontSize: 32, fontWeight: 900, color: 'var(--secondary)' }}>Engineered for Excellence</h2>
+                            <p style={{ color: 'var(--text-muted)', fontSize: 16 }}>Built with modern architecture to support global healthcare scaling.</p>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 32 }}>
+                            {[
+                                { t: 'High Availability', d: 'Redundant systems ensuring 99.99% uptime for appointment scheduling and records accessing.', i: <Activity /> },
+                                { t: 'Data Privacy', d: 'Enterprise-grade encryption and HIPAA-compliant data storage protocols strictly enforced.', i: <ShieldPlus /> },
+                                { t: 'Scalable API', d: 'Custom-built REST architecture and real-time MongoDB synchronization for lightning-fast loads.', i: <Sparkles /> }
+                            ].map((v, idx) => (
+                                <div key={idx} className="admin-form-card" style={{ padding: 40, border: 'none', background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(20px)', transition: 'transform 0.3s' }}>
+                                    <div style={{ width: 52, height: 52, background: 'white', borderRadius: 14, boxShadow: 'var(--shadow-xs)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', marginBottom: 20 }}>{v.i}</div>
+                                    <h3 style={{ fontSize: 20, fontWeight: 800, color: 'var(--secondary)', marginBottom: 12 }}>{v.t}</h3>
+                                    <p style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.6 }}>{v.d}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
-    </div>
-);
+    );
+};

@@ -44,7 +44,7 @@ export const DoctorCard = ({ doctor }) => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
                     <Star size={13} fill="#f59e0b" color="#f59e0b" />
                     <span style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>4.8</span>
-                    <span style={{ fontSize: 12, color: 'var(--text-faint)', marginLeft: 4 }}>· ${doctor.fees} fee</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-faint)', marginLeft: 4 }}>· ₹{doctor.fees} fee</span>
                 </div>
             </div>
         </div>

@@ -1,0 +1,9 @@
+# Project-level gitignore
+node_modules/
+.env*
+*.log
+.vscode/
+.idea/
+.DS_Store
+
+# Nested gitignore files will also apply, but this handles root-level ones.
