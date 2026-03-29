@@ -7,3 +7,7 @@ node_modules/
 .DS_Store
 
 # Nested gitignore files will also apply, but this handles root-level ones.
+
+
+.env
+backend/.env
